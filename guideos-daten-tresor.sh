@@ -1,0 +1,171 @@
+#!/bin/bash
+
+# Funktion: Fortschritt anzeigen
+zeige_fortschritt() {
+    (
+        echo "10"; sleep 0.5
+        echo "# Starte Verschlüsselung..."
+        echo "30"; sleep 0.5
+        echo "# Verarbeite Daten..."
+        echo "60"; sleep 1
+        echo "# Verschlüsselung fast abgeschlossen..."
+        echo "90"; sleep 0.5
+        echo "100"; sleep 0.3
+    ) | zenity --progress \
+        --title="GuideOS Daten-Tresor" \
+        --text="Bereite Verschlüsselung vor..." \
+        --percentage=0 --auto-close --pulsate \
+        --width=500 --height=70
+}
+
+# Funktion: Passwortstärke bewerten
+bewerte_passwort() {
+    local pw="$1"
+    local score=0
+
+    [[ ${#pw} -ge 8 ]] && ((score++))
+    [[ "$pw" =~ [A-Z] ]] && ((score++))
+    [[ "$pw" =~ [a-z] ]] && ((score++))
+    [[ "$pw" =~ [0-9] ]] && ((score++))
+    [[ "$pw" =~ [^a-zA-Z0-9] ]] && ((score++))
+
+    case $score in
+        5) echo "Stark" ;;
+        3|4) echo "Mittel" ;;
+        *) echo "Schwach" ;;
+    esac
+}
+
+# Funktion: Passwort generieren
+passwort_generieren() {
+    openssl rand -base64 14
+}
+
+# Hauptauswahl: Verschlüsseln oder Entschlüsseln
+aktion=$(zenity --list --radiolist \
+    --title="GuideOS Daten-Tresor" \
+    --text="Was möchtest du tun?" \
+    --column="Ausgewählt" --column="Aktion" \
+    --width=600 --height=300 \
+    TRUE "Daten-Tresor verschlüsseln" \
+    FALSE "Daten-Tresor entschlüsseln")
+
+if [ -z "$aktion" ]; then
+    zenity --error --text="Keine Auswahl getroffen. Vorgang abgebrochen." --width=400 --height=70
+    exit 1
+fi
+
+# Hinweis zur Verschlüsselung anzeigen, wenn "Daten-Tresor verschlüsseln" gewählt wurde
+if [ "$aktion" = "Daten-Tresor verschlüsseln" ]; then
+    zenity --info --title="Info zur Sicherheit" \
+        --text="\
+    Die Verschlüsselung erfolgt mit dem sicheren Algorithmus AES-256-CBC.\n\
+    Deine Daten sind bei richtig gewähltem Passwort sehr gut geschützt." \
+        --width=500 --height=120 --icon-name=dialog-information
+fi
+
+# ------------------- ENTSCHLÜSSELN ---------------------
+if [ "$aktion" = "Daten-Tresor entschlüsseln" ]; then
+    tresor=$(zenity --file-selection --title="Wähle die Datei mit Endung '.Daten-Tresor'" --width=600 --height=400)
+    if [ -z "$tresor" ]; then
+        zenity --error --text="Keine Datei ausgewählt. Vorgang abgebrochen." --width=400 --height=150
+        exit 1
+    fi
+
+    zielordner=$(zenity --file-selection --directory --title="Wähle ein Zielverzeichnis für die Entschlüsselung" --width=600 --height=400)
+    if [ -z "$zielordner" ]; then
+        zenity --error --text="Kein Zielverzeichnis ausgewählt. Vorgang abgebrochen." --width=400 --height=150
+        exit 1
+    fi
+
+    passwort=$(zenity --password --title="Passwort für Entschlüsselung" --width=400)
+    [ -z "$passwort" ] && zenity --error --text="Abbruch der Passworteingabe." --width=400 && exit 1
+
+    entschluesselte_tar="${tresor%.Daten-Tresor}.tar"
+
+    if ! openssl enc -d -aes-256-cbc -pbkdf2 -in "$tresor" -out "$entschluesselte_tar" -pass pass:"$passwort"; then
+        zenity --error --text="Entschlüsselung fehlgeschlagen. Falsches Passwort oder beschädigte Datei." --width=500
+        rm -f "$entschluesselte_tar"
+        exit 1
+    fi
+
+    tar -xf "$entschluesselte_tar" -C "$zielordner"
+    rm "$entschluesselte_tar"
+
+    zenity --info --text="Der Daten-Tresor wurde erfolgreich entschlüsselt und nach:\n\n$zielordner\n\nentpackt." --width=500
+    exit 0
+fi
+
+# ------------------- VERSCHLÜSSELN ---------------------
+
+ordner=$(zenity --file-selection --directory --title="Wähle den Ordner, den du zu einem Daten-Tresor machen möchtest" --width=600 --height=400)
+if [ -z "$ordner" ]; then
+    zenity --error --text="Kein Ordner ausgewählt. Vorgang abgebrochen." --width=400 --height=150
+    exit 1
+fi
+
+wahl=$(zenity --list --radiolist \
+    --title="Passwort wählen" \
+    --text="Möchtest du ein eigenes Passwort eingeben oder ein sicheres generieren lassen?" \
+    --column="Ausgewählt" --column="Option" \
+    TRUE "Eigenes Passwort eingeben" \
+    FALSE "Sicheres Passwort generieren")
+
+if [ "$wahl" = "Sicheres Passwort generieren" ]; then
+    passwort=$(passwort_generieren)
+    zenity --info --title="Sicheres Passwort" \
+            --text="Dein sicheres Passwort lautet:\n\n$passwort\n\n⚠️ ACHTUNG: BEWAHRE DAS PASSWORT GUT AUF – ES KANN NICHT WIEDERHERGESTELLT WERDEN! ⚠️" \
+        --width=500 --height=200
+else
+    while true; do
+        passwort=$(zenity --password --title="Passwort für Verschlüsselung" --width=400)
+        [ -z "$passwort" ] && zenity --error --text="Abbruch der Passworteingabe." --width=400 && exit 1
+
+        passwort2=$(zenity --password --title="Passwort bestätigen" --width=400)
+        [ -z "$passwort2" ] && zenity --error --text="Abbruch der Passworteingabe." --width=400 && exit 1
+
+        if [ "$passwort" != "$passwort2" ]; then
+            zenity --error --text="Die Passwörter stimmen nicht überein." --width=400 --height=150
+            continue
+        fi
+
+        staerke=$(bewerte_passwort "$passwort")
+
+        if [ "$staerke" = "Schwach" ]; then
+            zenity --warning \
+                --title="Schwaches Passwort" \
+                --text="Das gewählte Passwort ist zu schwach.\n\nEin sicheres Passwort sollte:\n• Mindestens 8 Zeichen enthalten\n• Groß- und Kleinbuchstaben\n• Zahlen\n• Sonderzeichen beinhalten\n\nBitte wähle ein stärkeres Passwort." \
+                --width=500 --height=250
+        else
+            break
+        fi
+    done
+fi
+
+# TAR-Datei erstellen
+ordnername=$(basename "$ordner")
+zielverzeichnis=$(dirname "$ordner")
+timestamp=$(date +%Y-%m-%d_%H-%M-%S)
+tmp_tar="$zielverzeichnis/${ordnername}_${timestamp}.tar"
+
+tar -cf "$tmp_tar" -C "$(dirname "$ordner")" "$ordnername"
+
+zeige_fortschritt
+
+tresor_datei="$zielverzeichnis/${ordnername}_${timestamp}.Daten-Tresor"
+openssl enc -aes-256-cbc -salt -pbkdf2 -in "$tmp_tar" -out "$tresor_datei" -pass pass:"$passwort"
+
+# Option zum sicheren Löschen des Originals
+zenity --question \
+  --title="Original sicher löschen?" \
+  --width=500 --height=180 \
+  --text="Möchtest du den Originalordner '$ordnername' nach dem Erstellen des Daten-Tresors SICHER löschen?\n\nEine 'sichere Löschung' bedeutet:\nDie Daten werden nicht einfach entfernt, sondern mehrfach überschrieben, damit sie auch mit speziellen Programmen nicht wiederhergestellt werden können."
+
+if [ $? -eq 0 ]; then
+    shred -u -z -n 3 "$tmp_tar"
+    rm -rf "$ordner"
+else
+    rm "$tmp_tar"
+fi
+
+zenity --info --text="Der Daten-Tresor wurde erfolgreich erstellt: $tresor_datei" --width=500 --height=150

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=GuideOS Daten-Tresor
+Comment=Verschlüssele oder entschlüssele deine sensiblen Daten
+Exec=/bin/guideos-daten-tresor.sh
+Icon=/usr/share/pixmaps/guideos-daten-tresor.png
+Terminal=false
+Type=Application
+Categories=Utility;Security;
+StartupNotify=true
