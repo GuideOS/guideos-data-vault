@@ -16,5 +16,6 @@ override_dh_install:
 	install -m 644 guideos-data-vault.png debian/$(PACKAGE)/usr/share/icons/hicolor/256x256/guideos-data-vault.png
 	install -m 644 guideos-data-vault.svg debian/$(PACKAGE)/usr/share/icons/hicolor/scalable/apps/guideos-data-vault.svg
 
+	./create_desktop_files.sh
 
 	dh_install
