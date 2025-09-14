@@ -1,5 +1,18 @@
 #!/bin/bash
 
+#!/bin/bash
+# ==============================================================================
+# GuideOS Daten-Tresor – Verschlüsselung & Entschlüsselung mit GUI
+#
+# Autor  : evilware666
+# Version: 2.0
+# Datum  : 29.08.2025
+# ==============================================================================
+
+
+# System-Theme übernehmen
+GTK_THEME=$(gsettings get org.cinnamon.desktop.interface gtk-theme | tr -d "'")
+export GTK_THEME
 # Funktion: Fortschritt anzeigen
 zeige_fortschritt() {
     (
